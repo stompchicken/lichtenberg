@@ -178,7 +178,7 @@ function Field(width, height)
             var channel = [];
             var node = this.source[terminals[i]];
             while(node != null) {
-                channel.push({x: node.cell.x, y: node.cell.y});
+                channel.push({x: node.cell.x + node.jitter[0], y: node.cell.y + node.jitter[1]});
                 node = this.source[node.parent];
             }
             channel.reverse();
