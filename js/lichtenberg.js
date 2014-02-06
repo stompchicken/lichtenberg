@@ -38,7 +38,7 @@ function Field(width, height)
     // hash -> {value: Float, cell: Cell}
     this.sourceFrontier = {};
 
-    this.sink = new Array();
+    this.sink = {};
     this.sinkFrontier = new Array();
 
     this.finished = false;
@@ -55,10 +55,16 @@ function Field(width, height)
         return {
             cell: cell,
             parent: null,
-            jitter: jitter(0.25),
+            jitter: jitter(0.4),
             depth: 0,
             terminal: true
         };
+    }
+
+    this.addSink = function(cell) {
+        var hash = this.hashCell(cell);
+        var node = this.createNode(cell);
+        this.sink[hash] = node;
     }
 
     // parent can be null
@@ -120,6 +126,11 @@ function Field(width, height)
                 v = 0
                 for(h in this.source) {
                     v += 1.0 - (0.5 / distance(cell, this.source[h].cell));
+                }
+
+                for(h in this.sink) {
+//                    console.info(1.0 - (0.5 / distance(cell, this.sink[h].cell)));
+                    v += (20.0 / distance(cell, this.sink[h].cell));
                 }
 
                 this.sourceFrontier[hash] = {value: v, cell: cell, parent: parent}

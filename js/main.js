@@ -26,7 +26,7 @@ var init = function() {
     lineGeometry = new THREE.Geometry();
     var material = new THREE.LineBasicMaterial({
         color: 0xa0c0ff,
-        linewidth: 4,
+        linewidth: 2,
         vertexColors: true});
     for(var i=0; i<lineSize; i++) {
         lineGeometry.vertices.push(new THREE.Vector3(0, 0, 0));
@@ -45,13 +45,15 @@ var init = function() {
     container.appendChild(stats.domElement);
 
     settings = {
+        loop: false,
         reset: function() {
             setup();
         },
-        power: 20.0
+        power: 100.0,
     };
 
     var gui = new dat.GUI();
+    gui.add(settings, 'loop');
     gui.add(settings, 'reset');
     gui.add(settings, 'power', 0, 1000);
     gui.closed = true;
@@ -62,15 +64,19 @@ var init = function() {
 var setup = function() {
     frame = 0;
 
-    field = new Field(32, 32);
-    field.addSource({x: 16, y: 16});
+    field = new Field(128, 128);
+    field.addSource({x: field.width/2, y: field.height-1});
+
+    for(var i=0; i<field.width; i++) {
+        field.addSink({x: i, y: 0});
+    }
 
     for(var i=0; i<lineSize; i++) {
         lineGeometry.vertices[i].set(0, 0, 0);
         lineGeometry.colors[i].setRGB(1, 1, 1);
     }
 
-//    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x800000})));
+    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x202020})));
     filter = new Filter(256, 256);
 }
 
@@ -81,7 +87,7 @@ var convert = function(pt) {
 var render = function () {
     requestAnimationFrame(render);
 
-    if(frame <= 100) {
+    if(frame <= 200) {
         var sample = field.sampleSourceFrontier(settings.power);
         field.addSource(sample.cell, sample.parent);
 
@@ -103,12 +109,16 @@ var render = function () {
 
         lineGeometry.verticesNeedUpdate = true;
         lineGeometry.colorsNeedUpdate = true;
+    } else if (settings.loop) {
+        frame = 0;
+        setup();
     }
+
+    frame += 1;
 
     filter.render(renderer, scene, camera);
 
     stats.update();
-    frame += 1;
 };
 
 init();
