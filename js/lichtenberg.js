@@ -183,16 +183,28 @@ function Field(width, height)
         // Sort by depth
         terminals.sort(function(a,b){ return b.depth-a.depth; });
 
+        var visited = {}
+
         // Create channels from root to leaf, deepest first
         var channels = [];
         for(var i=0; i<terminals.length; i++) {
             var channel = [];
             var node = this.source[terminals[i]];
             while(node != null) {
-                channel.push({x: node.cell.x + node.jitter[0], y: node.cell.y + node.jitter[1]});
+                var hash = this.hashCell(node.cell);
+                channel.push({x: node.cell.x + node.jitter[0],
+                              y: node.cell.y + node.jitter[1]});
+
+                if(visited[hash]) {
+                    break;
+                } else {
+                    visited[hash] = true
+                }
+
                 node = this.source[node.parent];
             }
             channel.reverse();
+
             channels.push(channel);
         }
 
