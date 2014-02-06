@@ -26,7 +26,7 @@ var init = function() {
     lineGeometry = new THREE.Geometry();
     var material = new THREE.LineBasicMaterial({
         color: 0xa0c0ff,
-        linewidth: 2,
+        linewidth: 4,
         vertexColors: true});
     for(var i=0; i<lineSize; i++) {
         lineGeometry.vertices.push(new THREE.Vector3(0, 0, 0));
@@ -49,7 +49,7 @@ var init = function() {
         reset: function() {
             setup();
         },
-        power: 100.0,
+        power: 150.0,
     };
 
     var gui = new dat.GUI();
@@ -76,8 +76,10 @@ var setup = function() {
         lineGeometry.colors[i].setRGB(1, 1, 1);
     }
 
-    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x202020})));
-    filter = new Filter(256, 256);
+//    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x808080})));
+    filter = new Filter(1024, 1024);
+    filter.addPass(new HorizontalBlur(10.0));
+    filter.addPass(new VerticalBlur(10.0));
 }
 
 var convert = function(pt) {
@@ -93,6 +95,7 @@ var render = function () {
 
         if(!field.finished) {
             var channels = field.getChannels();
+
             var vertex = 0;
             for(var i=0; i<channels.length; i++) {
 
@@ -102,6 +105,15 @@ var render = function () {
                     var pt2 = convert(channel[j]);
                     lineGeometry.vertices[vertex].set(pt1.x, pt1.y, 0);
                     lineGeometry.vertices[vertex+1].set(pt2.x, pt2.y, 0);
+                    if(i == 0) {
+                        lineGeometry.colors[vertex].setRGB(1.0, 1.0, 1.0);
+                        lineGeometry.colors[vertex+1].setRGB(1.0, 1.0, 1.0);
+                    } else {
+                        var l = 0.5;
+                        lineGeometry.colors[vertex].setRGB(l, l, l);
+                        lineGeometry.colors[vertex+1].setRGB(l, l, l);
+                    }
+
                     vertex += 2;
                 }
             }
