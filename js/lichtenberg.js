@@ -55,7 +55,7 @@ function Field(width, height)
         return {
             cell: cell,
             parent: null,
-            jitter: jitter(0.4),
+            jitter: jitter(0.5),
             depth: 0,
             terminal: true
         };
@@ -120,6 +120,11 @@ function Field(width, height)
     this.addSourceFrontier = function(cell, parent) {
         if(cell.x >= 0 && cell.x < this.width && cell.y >= 0 && cell.y < this.height) {
             var hash = this.hashCell(cell);
+
+            if(this.sink[hash]) {
+                this.finished = true;
+                return;
+            }
 
             if(!this.source[hash] && !this.sourceFrontier[hash]) {
 

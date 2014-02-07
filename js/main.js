@@ -49,7 +49,7 @@ var init = function() {
         reset: function() {
             setup();
         },
-        power: 250.0,
+        power: 500.0,
     };
 
     var gui = new dat.GUI();
@@ -64,7 +64,7 @@ var init = function() {
 var setup = function() {
     frame = 0;
 
-    field = new Field(256, 256);
+    field = new Field(1024, 1024);
     field.addSource({x: field.width/2, y: field.height-1});
 
     for(var i=0; i<field.width; i++) {
@@ -76,14 +76,13 @@ var setup = function() {
         lineGeometry.colors[i].setRGB(1, 1, 1);
     }
 
-//    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x202020})));
+    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x000008})));
 
-    console.info(width+","+height);
-    var filterWidth = width*2;
-    var filterHeight = height*2;
+    var filterWidth = width;
+    var filterHeight = height;
     filter = new Filter(filterWidth, filterHeight);
-    filter.addPass(new HorizontalBlur(1/filterWidth));
-    filter.addPass(new VerticalBlur(1/filterHeight));
+    filter.addPass(new HorizontalBlur(1.0/filterWidth));
+    filter.addPass(new VerticalBlur(1.0/filterHeight));
 }
 
 var convert = function(pt) {
@@ -93,30 +92,27 @@ var convert = function(pt) {
 var render = function () {
     requestAnimationFrame(render);
 
-    if(frame < 250) {
+    if(!field.finished) {
         var sample = field.sampleSourceFrontier(settings.power);
         field.addSource(sample.cell, sample.parent);
 
-        if(!field.finished) {
-            var channels = field.getChannels();
+        var channels = field.getChannels();
 
-            var vertex = 0;
-            for(var i=0; i<channels.length; i++) {
+        var vertex = 0;
+        for(var i=0; i<channels.length; i++) {
+            var channel = channels[i];
+            for(var j=1; j<channel.length && vertex < lineSize; j++) {
+                var pt1 = convert(channel[j-1]);
+                var pt2 = convert(channel[j]);
+                lineGeometry.vertices[vertex].set(pt1.x, pt1.y, 0);
+                lineGeometry.vertices[vertex+1].set(pt2.x, pt2.y, 0);
 
-                var channel = channels[i];
-                for(var j=1; j<channel.length && vertex < lineSize; j++) {
-                    var pt1 = convert(channel[j-1]);
-                    var pt2 = convert(channel[j]);
-                    lineGeometry.vertices[vertex].set(pt1.x, pt1.y, 0);
-                    lineGeometry.vertices[vertex+1].set(pt2.x, pt2.y, 0);
-
-                    vertex += 2;
-                }
+                vertex += 2;
             }
         }
 
         lineGeometry.verticesNeedUpdate = true;
-//        lineGeometry.colorsNeedUpdate = true;
+        //        lineGeometry.colorsNeedUpdate = true;
     } else if (settings.loop) {
         frame = 0;
         setup();
