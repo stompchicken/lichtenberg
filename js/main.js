@@ -26,7 +26,7 @@ var init = function() {
     lineGeometry = new THREE.Geometry();
     var material = new THREE.LineBasicMaterial({
         color: 0xa0c0ff,
-        linewidth: 4,
+        linewidth: 1,
         vertexColors: true});
     for(var i=0; i<lineSize; i++) {
         lineGeometry.vertices.push(new THREE.Vector3(0, 0, 0));
@@ -49,7 +49,7 @@ var init = function() {
         reset: function() {
             setup();
         },
-        power: 150.0,
+        power: 250.0,
     };
 
     var gui = new dat.GUI();
@@ -64,7 +64,7 @@ var init = function() {
 var setup = function() {
     frame = 0;
 
-    field = new Field(128, 128);
+    field = new Field(256, 256);
     field.addSource({x: field.width/2, y: field.height-1});
 
     for(var i=0; i<field.width; i++) {
@@ -76,10 +76,14 @@ var setup = function() {
         lineGeometry.colors[i].setRGB(1, 1, 1);
     }
 
-//    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x808080})));
-    filter = new Filter(1024, 1024);
-    filter.addPass(new HorizontalBlur(10.0));
-    filter.addPass(new VerticalBlur(10.0));
+//    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x202020})));
+
+    console.info(width+","+height);
+    var filterWidth = width*2;
+    var filterHeight = height*2;
+    filter = new Filter(filterWidth, filterHeight);
+    filter.addPass(new HorizontalBlur(1/filterWidth));
+    filter.addPass(new VerticalBlur(1/filterHeight));
 }
 
 var convert = function(pt) {
@@ -89,7 +93,7 @@ var convert = function(pt) {
 var render = function () {
     requestAnimationFrame(render);
 
-    if(frame <= 200) {
+    if(frame < 250) {
         var sample = field.sampleSourceFrontier(settings.power);
         field.addSource(sample.cell, sample.parent);
 
@@ -105,14 +109,6 @@ var render = function () {
                     var pt2 = convert(channel[j]);
                     lineGeometry.vertices[vertex].set(pt1.x, pt1.y, 0);
                     lineGeometry.vertices[vertex+1].set(pt2.x, pt2.y, 0);
-                    if(i == 0) {
-                        lineGeometry.colors[vertex].setRGB(1.0, 1.0, 1.0);
-                        lineGeometry.colors[vertex+1].setRGB(1.0, 1.0, 1.0);
-                    } else {
-                        var l = 0.5;
-                        lineGeometry.colors[vertex].setRGB(l, l, l);
-                        lineGeometry.colors[vertex+1].setRGB(l, l, l);
-                    }
 
                     vertex += 2;
                 }
@@ -120,7 +116,7 @@ var render = function () {
         }
 
         lineGeometry.verticesNeedUpdate = true;
-        lineGeometry.colorsNeedUpdate = true;
+//        lineGeometry.colorsNeedUpdate = true;
     } else if (settings.loop) {
         frame = 0;
         setup();

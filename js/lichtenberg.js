@@ -130,7 +130,7 @@ function Field(width, height)
 
                 for(h in this.sink) {
 //                    console.info(1.0 - (0.5 / distance(cell, this.sink[h].cell)));
-                    v += (20.0 / distance(cell, this.sink[h].cell));
+                    v += (100.0 / distance(cell, this.sink[h].cell));
                 }
 
                 this.sourceFrontier[hash] = {value: v, cell: cell, parent: parent}
@@ -229,20 +229,14 @@ function Filter(width, height) {
         stencilBuffer: false
     };
 
-    this.target1 = new THREE.WebGLRenderTarget(64, 64, params);
-    this.target2 = new THREE.WebGLRenderTarget(64, 64, params);
+    this.target1 = new THREE.WebGLRenderTarget(width, height, params);
+    this.target2 = new THREE.WebGLRenderTarget(width, height, params);
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.scene = new THREE.Scene();
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.passes = new Array();
 
     this.scene.add(this.quad);
-
-    this.target1.width = width;
-    this.target1.height = height;
-
-    this.target2.width = width;
-    this.target2.height = height;
 
     this.addPass = function(filterPass) {
         this.passes.push(filterPass);
@@ -295,15 +289,15 @@ function HorizontalBlur(windowSize) {
             "varying vec2 vUv;",
             "void main() {",
             "vec4 sum = vec4( 0.0 );",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 4.0 * h, vUv.y ) ) * 0.5;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 3.0 * h, vUv.y ) ) * 0.0918;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 2.0 * h, vUv.y ) ) * 0.25;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 1.0 * h, vUv.y ) ) * 0.5;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 4.0 * h, vUv.y ) ) * 0.005;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 3.0 * h, vUv.y ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 2.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 1.0 * h, vUv.y ) ) * 0.2;",
             "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 1.0;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 1.0 * h, vUv.y ) ) * 0.5;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 2.0 * h, vUv.y ) ) * 0.25;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 3.0 * h, vUv.y ) ) * 0.1;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 4.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 1.0 * h, vUv.y ) ) * 0.2;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 2.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 3.0 * h, vUv.y ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 4.0 * h, vUv.y ) ) * 0.005;",
             "gl_FragColor = sum;",
             "}"
         ].join("\n")
@@ -329,15 +323,15 @@ function VerticalBlur(windowSize) {
             "varying vec2 vUv;",
             "void main() {",
             "vec4 sum = vec4( 0.0 );",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 4.0 * v ) ) * 0.05;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 3.0 * v ) ) * 0.1;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 2.0 * v ) ) * 0.25;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 1.0 * v ) ) * 0.5;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 4.0 * v ) ) * 0.005;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 3.0 * v ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 2.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 1.0 * v ) ) * 0.2;",
             "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 1.0;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 1.0 * v ) ) * 0.5;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 2.0 * v ) ) * 0.25;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 3.0 * v ) ) * 0.1;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 4.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 1.0 * v ) ) * 0.2;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 2.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 3.0 * v ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 4.0 * v ) ) * 0.005;",
             "gl_FragColor = sum;",
             "}"
         ].join("\n")}
