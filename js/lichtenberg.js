@@ -55,7 +55,7 @@ function Field(width, height)
         return {
             cell: cell,
             parent: null,
-            jitter: jitter(0.5),
+            jitter: jitter(1.0),
             depth: 0,
             terminal: true
         };
@@ -99,14 +99,15 @@ function Field(width, height)
         }
 
         // Add adjacent cells to frontier
-        this.addSourceFrontier(new Cell(cell.x-1, cell.y-1), cell);
         this.addSourceFrontier(new Cell(cell.x,   cell.y-1), cell);
-        this.addSourceFrontier(new Cell(cell.x+1, cell.y-1), cell);
+        this.addSourceFrontier(new Cell(cell.x  , cell.y+1), cell);
         this.addSourceFrontier(new Cell(cell.x+1, cell.y  ), cell);
         this.addSourceFrontier(new Cell(cell.x-1, cell.y  ), cell);
-        this.addSourceFrontier(new Cell(cell.x-1, cell.y+1), cell);
-        this.addSourceFrontier(new Cell(cell.x  , cell.y+1), cell);
+
+        this.addSourceFrontier(new Cell(cell.x-1, cell.y-1), cell);
         this.addSourceFrontier(new Cell(cell.x+1, cell.y+1), cell);
+        this.addSourceFrontier(new Cell(cell.x-1, cell.y+1), cell);
+        this.addSourceFrontier(new Cell(cell.x+1, cell.y-1), cell);
     };
 
     this.getSource = function() {
@@ -154,25 +155,38 @@ function Field(width, height)
     this.sampleSourceFrontier = function(power) {
         var min = 1.0;
         var max = 0.0;
+        var total = 0;
         for(h in this.sourceFrontier) {
             min = Math.min(this.sourceFrontier[h].value, min);
             max = Math.max(this.sourceFrontier[h].value, max);
+            total += 1;
         }
         var range = max - min;
-        var sum = 0.0;
-        for(h in this.sourceFrontier) {
-            sum += Math.pow((this.sourceFrontier[h].value - min) / range, power);
-        }
 
-        var s = Math.random() * sum;
-        for(h in this.sourceFrontier) {
-            s -= Math.pow((this.sourceFrontier[h].value - min)/range, power);
-            if(s <= 0) {
-                return {cell: this.sourceFrontier[h].cell, parent: this.sourceFrontier[h].parent}
+        var sum = 0.0;
+        if(range <= 0.001) {
+            sum = total * min;
+            var s = Math.random() * total;
+            for(h in this.sourceFrontier) {
+                s -= 1.0;
+                if(s <= 0) {
+                    return {cell: this.sourceFrontier[h].cell, parent: this.sourceFrontier[h].parent}
+                }
+            }
+        } else {
+            for(h in this.sourceFrontier) {
+                sum += Math.pow((this.sourceFrontier[h].value - min) / range, power);
+            }
+            var s = Math.random() * sum;
+            for(h in this.sourceFrontier) {
+                s -= Math.pow((this.sourceFrontier[h].value - min)/range, power);
+                if(s <= 0) {
+                    return {cell: this.sourceFrontier[h].cell, parent: this.sourceFrontier[h].parent}
+                }
             }
         }
+
         console.error("sample failed");
-        console.error("min="+min+" max="+max+" sum="+sum+" s="+s);
         return null;
     }
 
@@ -294,15 +308,15 @@ function HorizontalBlur(windowSize) {
             "varying vec2 vUv;",
             "void main() {",
             "vec4 sum = vec4( 0.0 );",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 4.0 * h, vUv.y ) ) * 0.005;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 3.0 * h, vUv.y ) ) * 0.01;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x - 2.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 4.0 * h, vUv.y ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 3.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x - 2.0 * h, vUv.y ) ) * 0.1;",
             "sum += texture2D( tDiffuse, vec2( vUv.x - 1.0 * h, vUv.y ) ) * 0.2;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 1.0;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 0.8;",
             "sum += texture2D( tDiffuse, vec2( vUv.x + 1.0 * h, vUv.y ) ) * 0.2;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 2.0 * h, vUv.y ) ) * 0.05;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 3.0 * h, vUv.y ) ) * 0.01;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x + 4.0 * h, vUv.y ) ) * 0.005;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 2.0 * h, vUv.y ) ) * 0.1;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 3.0 * h, vUv.y ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x + 4.0 * h, vUv.y ) ) * 0.01;",
             "gl_FragColor = sum;",
             "}"
         ].join("\n")
@@ -328,15 +342,15 @@ function VerticalBlur(windowSize) {
             "varying vec2 vUv;",
             "void main() {",
             "vec4 sum = vec4( 0.0 );",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 4.0 * v ) ) * 0.005;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 3.0 * v ) ) * 0.01;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 2.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 4.0 * v ) ) * 0.01;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 3.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 2.0 * v ) ) * 0.1;",
             "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y - 1.0 * v ) ) * 0.2;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 1.0;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y ) ) * 0.8;",
             "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 1.0 * v ) ) * 0.2;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 2.0 * v ) ) * 0.05;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 3.0 * v ) ) * 0.01;",
-            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 4.0 * v ) ) * 0.005;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 2.0 * v ) ) * 0.1;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 3.0 * v ) ) * 0.05;",
+            "sum += texture2D( tDiffuse, vec2( vUv.x, vUv.y + 4.0 * v ) ) * 0.01;",
             "gl_FragColor = sum;",
             "}"
         ].join("\n")}
@@ -346,3 +360,59 @@ function VerticalBlur(windowSize) {
 exports.Filter = Filter
 exports.HorizontalBlur = HorizontalBlur
 exports.VerticalBlur = VerticalBlur
+
+// -----------------------------------------------------------------------------
+// APSF
+
+
+function APSF() {
+
+    this.filter = function(size, T, mu) {
+
+        var q = 0.9;
+        var k = 0.025;
+
+        
+
+
+
+    }
+
+    this.kernel = function(I0, T, mu, M, q) {
+        var sum = 0.0;
+        for(var m=0; m<M; m++) {
+            sum += (this.g(I0, T, m, q) + this.g(I0, T, m+1, q)) * this.legendre(m, mu);
+        }
+        return sum;
+    };
+
+    this.g = function(I0, T, m, q) {
+        if(m == 0) {
+            return 0.0;
+        } else {
+            var beta = ((2.0*m+1)/m)*(1 - Math.pow(q, m-1));
+            return I0 * Math.exp((-beta*T) - (m+1)*Math.log(T));
+        }
+    }
+
+    this.legendre = function(m, x) {
+        if(m == 0) {
+            return 1.0;
+        } else if (m == 1.0) {
+            return x;
+        } else {
+
+            var memo = [];
+            memo.length = m+1;
+            memo[0] = 1.0;
+            memo[1] = x;
+            for(var i=2; i<=m; i++) {
+                memo[i] = (((2.0*i-1)*x*memo[i-1]) - (i-1)*memo[i-2]) / i;
+            }
+            return memo[m];
+        }
+    };
+
+    
+
+};

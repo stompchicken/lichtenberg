@@ -1,0 +1,66 @@
+
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.line {
+  fill: none;
+  stroke: steelblue;
+  stroke-width: 2.5px;
+}
+
+</style>
+<head>
+  <script src="js/jquery-1.10.2.js"></script>
+  <script src="js/jquery-ui-1.10.4.custom.js"></script>
+  <link rel="stylesheet" href="css/jquery-ui-1.10.4.custom.css">
+
+  <style>
+  #param-T, #param-q, #param-M {
+    width: 300px;
+    margin: 15px;
+  }
+  </style>
+
+  <script src="js/d3.v3.min.js"></script>
+  <script src="js/lichtenberg.js"></script>
+</head>
+
+
+<body>
+<script src="js/plots.js"></script>
+
+<p>
+  <label for="T">T:</label>
+  <input type="text" id="T" style="border:0; color:#f6931f; font-weight:bold;">
+</p>
+
+<div id="param-T"></div>
+
+<p>
+  <label for="q">q:</label>
+  <input type="text" id="q" style="border:0; color:#f6931f; font-weight:bold;">
+</p>
+
+<div id="param-q"></div>
+
+<p>
+  <label for="M">M:</label>
+  <input type="text" id="M" style="border:0; color:#f6931f; font-weight:bold;">
+</p>
+
+<div id="param-M"></div>
+
+</body>
+</html>

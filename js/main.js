@@ -15,10 +15,12 @@ var init = function() {
     height = window.innerHeight;
 
     scene = new THREE.Scene();
-    camera = (width > height) ?
-        new THREE.OrthographicCamera(-0.6*(width/height), 0.6*(width/height), 0.6, -0.6, 1, 10) :
-        new THREE.OrthographicCamera(-0.6, 0.6, 0.6*(height/width), -0.6*(height/width), 1, 10);
-    camera.position.z = 5;
+//    camera = (width > height) ? new THREE.OrthographicCamera(-0.6*(width/height), 0.6*(width/height), 0.6, -0.6, 1, 10) :
+//        new THREE.OrthographicCamera(-0.6, 0.6, 0.6*(height/width), -0.6*(height/width), 1, 10);
+
+    camera = new THREE.PerspectiveCamera(45, width / height, 1, 1000)
+
+    camera.position.z = 1.5;
 
     renderer = new THREE.WebGLRenderer();
     renderer.setSize(width, height);
@@ -64,7 +66,7 @@ var init = function() {
 var setup = function() {
     frame = 0;
 
-    field = new Field(1024, 1024);
+    field = new Field(256, 256);
     field.addSource({x: field.width/2, y: field.height-1});
 
     for(var i=0; i<field.width; i++) {

@@ -38,6 +38,7 @@ test("Field::frontier", function() {
                                  valueFunction(frontier[i].cell, cell2));
     }
 
+/*
     var channels = field.getChannels();
     equal(1, channels.length);
     equal(2, channels[0].length);
@@ -45,8 +46,42 @@ test("Field::frontier", function() {
     equal(16, channels[0][0].y);
     equal(15, channels[0][1].x);
     equal(16, channels[0][1].y);
+*/
 });
 
+test("APSF::legendre", function() {
+    var apsf = new APSF();
 
+    equal(apsf.legendre(0, 1.0), 1.0);
+    equal(apsf.legendre(0, 2.0), 1.0);
 
+    equal(apsf.legendre(1, 1.0), 1.0);
+    equal(apsf.legendre(1, 2.0), 2.0);
+
+    var L2 = function(x) {
+        return (3*Math.pow(x, 2) - 1) / 2.0;
+    }
+    equal(apsf.legendre(2, 1.0), L2(1.0));
+    equal(apsf.legendre(2, 2.0), L2(2.0));
+
+    var L6 = function(x) {
+        return (231*Math.pow(x, 6) - 315*Math.pow(x, 4) + 105*Math.pow(x, 2) - 5) / 16.0; 
+    };
+
+    equal(apsf.legendre(6, 1.0), L6(1.0));
+    equal(apsf.legendre(6, 2.0), L6(2.0));
+});
+
+test("APSF::kernel", function() {
+
+    var apsf = new APSF();
+
+    var g1 = function(x) { return Math.exp(-2.0*Math.log(x)); };
+    equal(apsf.g(1.0, 0.0, 1.0, 0.0), g1(0.0));
+    equal(apsf.g(1.0, 1.0, 1.0, 1.0), g1(1.0));
+
+    var g2 = function(x, q) { return Math.exp(-2.5*x*(1-q) - 3*Math.log(x)); };
+    equal(apsf.g(1.0, 0.0, 2.0, 0.0), g1(0.0, 0.0));
+    equal(apsf.g(1.0, 1.0, 2.0, 1.0), g1(1.0, 1.0));
+});
 
