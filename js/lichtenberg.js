@@ -1,195 +1,34 @@
-// -----------------------------------------------------------------------------
-// Field
-
 if(typeof exports == 'undefined'){
     var exports = this['lichtenberg'] = {};
 }
 
-function Cell(x, y, index) {
-    this.x = x || 0;
-    this.y = y || 0;
-
-    this.toString = function() {
-        return "["+this.x+","+this.y+"]";
-    }
-}
-
 function distance(c1, c2) {
-    var dx = (c1.x - c2.x);
-    var dy = (c1.y - c2.y);
-    return Math.sqrt(dx*dx + dy*dy);
+    var dx = (c1[0] - c2[0]);
+    var dy = (c1[1] - c2[1]);
+    var dz = (c1[2] - c2[2]);
+    return Math.sqrt(dx*dx + dy*dy + dz*dz);
 }
 
-function uniform(min, max) {
-    return Math.random() * (max - min) + min;
-}
+// -----------------------------------------------------------------------------
+// Field
 
-function jitter(width) {
-    return [uniform(-width/2, width/2), uniform(-width/2, width/2)];
-}
-
-function Field(width, height)
-{
-    this.width = width;
-    this.height = height;
-
-    // hash -> {cell: Cell, parent: hash, jitter: [x, y]}
-    this.source = {};
-    // hash -> {value: Float, cell: Cell}
-    this.sourceFrontier = {};
-
-    this.sink = {};
-    this.sinkFrontier = new Array();
-
+// dim = [xspan, yspan, zspan]
+function Field(dim) {
+    this.dim = dim;
+    this.source = new Structure(this);
     this.finished = false;
 
-    this.hashCell = function(cell) {
-        return (cell.y*this.width) + cell.x;
-    }
-
     this.checkBounds = function(cell) {
-        return cell.x >= 0 && cell.x < this.width && cell.y >= 0 && cell.y < this.height;
+        return cell[0] >= 0 && cell[0] < this.dim[0] &&
+               cell[1] >= 0 && cell[1] < this.dim[1] &&
+               cell[2] >= 0 && cell[2] < this.dim[2];
     }
 
-    this.createNode = function(cell) {
-        return {
-            cell: cell,
-            parent: null,
-            jitter: jitter(1.0),
-            depth: 0,
-            terminal: true
-        };
+    this.makeCell(x, y, z) {
+        return [x, y, z, (z*this.dim[0]*this.dim[1]) + (y*this.dim[0]) + x]
     }
 
-    this.addSink = function(cell) {
-        var hash = this.hashCell(cell);
-        var node = this.createNode(cell);
-        this.sink[hash] = node;
-    }
-
-    // parent can be null
-    this.addSource = function(cell, parent) {
-        if(!this.checkBounds(cell) || (parent != null && !this.checkBounds(parent))) {
-            console.error("Out-of-bounds cell passed to addSource");
-            return null;
-        }
-
-        // Add to source
-        var hash = this.hashCell(cell);
-        var node = this.createNode(cell);
-        if(parent != null) {
-            var parentHash = this.hashCell(parent);
-            if(!(parentHash in this.source)) {
-                console.error("Parent supplied to addSource but is not present")
-                return;
-            }
-            node.parent = parentHash;
-            node.depth = this.source[parentHash].depth + 1;
-            this.source[parentHash].terminal = false;
-        }
-        this.source[hash] = node;
-
-        // Remove from frontier
-        delete this.sourceFrontier[hash];
-
-        // Update current frontier values
-        for(h in this.sourceFrontier) {
-            var f = this.sourceFrontier[h];
-            f.value += 1.0 - (0.5 / distance(cell, f.cell));
-        }
-
-        // Add adjacent cells to frontier
-        this.addSourceFrontier(new Cell(cell.x,   cell.y-1), cell);
-        this.addSourceFrontier(new Cell(cell.x  , cell.y+1), cell);
-        this.addSourceFrontier(new Cell(cell.x+1, cell.y  ), cell);
-        this.addSourceFrontier(new Cell(cell.x-1, cell.y  ), cell);
-
-        this.addSourceFrontier(new Cell(cell.x-1, cell.y-1), cell);
-        this.addSourceFrontier(new Cell(cell.x+1, cell.y+1), cell);
-        this.addSourceFrontier(new Cell(cell.x-1, cell.y+1), cell);
-        this.addSourceFrontier(new Cell(cell.x+1, cell.y-1), cell);
-    };
-
-    this.getSource = function() {
-        var cells = new Array();
-        for(h in this.source) {
-            cells.push(this.source[h].cell);
-        }
-        return cells;
-    }
-
-    this.addSourceFrontier = function(cell, parent) {
-        if(cell.x >= 0 && cell.x < this.width && cell.y >= 0 && cell.y < this.height) {
-            var hash = this.hashCell(cell);
-
-            if(this.sink[hash]) {
-                this.finished = true;
-                return;
-            }
-
-            if(!this.source[hash] && !this.sourceFrontier[hash]) {
-
-                v = 0
-                for(h in this.source) {
-                    v += 1.0 - (0.5 / distance(cell, this.source[h].cell));
-                }
-
-                for(h in this.sink) {
-//                    console.info(1.0 - (0.5 / distance(cell, this.sink[h].cell)));
-                    v += (100.0 / distance(cell, this.sink[h].cell));
-                }
-
-                this.sourceFrontier[hash] = {value: v, cell: cell, parent: parent}
-            }
-        }
-    };
-
-    this.getSourceFrontier = function() {
-        var cells = new Array();
-        for(h in this.sourceFrontier) {
-            cells.push(this.sourceFrontier[h]);
-        }
-        return cells;
-    }
-
-    this.sampleSourceFrontier = function(power) {
-        var min = 1.0;
-        var max = 0.0;
-        var total = 0;
-        for(h in this.sourceFrontier) {
-            min = Math.min(this.sourceFrontier[h].value, min);
-            max = Math.max(this.sourceFrontier[h].value, max);
-            total += 1;
-        }
-        var range = max - min;
-
-        var sum = 0.0;
-        if(range <= 0.001) {
-            sum = total * min;
-            var s = Math.random() * total;
-            for(h in this.sourceFrontier) {
-                s -= 1.0;
-                if(s <= 0) {
-                    return {cell: this.sourceFrontier[h].cell, parent: this.sourceFrontier[h].parent}
-                }
-            }
-        } else {
-            for(h in this.sourceFrontier) {
-                sum += Math.pow((this.sourceFrontier[h].value - min) / range, power);
-            }
-            var s = Math.random() * sum;
-            for(h in this.sourceFrontier) {
-                s -= Math.pow((this.sourceFrontier[h].value - min)/range, power);
-                if(s <= 0) {
-                    return {cell: this.sourceFrontier[h].cell, parent: this.sourceFrontier[h].parent}
-                }
-            }
-        }
-
-        console.error("sample failed");
-        return null;
-    }
-
+/*
     this.getChannels = function() {
         // Gather terminal nodes
         var terminals = [];
@@ -229,9 +68,114 @@ function Field(width, height)
 
         return channels;
     }
+*/
 }
 
-exports.Cell = Cell
+function Structure(field) {
+
+    this.field = field;
+    // index -> cell
+    this.cells = {};
+    // index -> [value, cell]
+    this.frontier = {};
+
+    // Some cached frontier values
+    this.frontierMax = -Number.MAX_VALUE;
+    this.frontierMin = Number.MAX_VALUE;
+    this.frontierSize = 0;
+
+    // Add a cell to the structure
+    this.addCell = function(cell) {
+        if(!this.field.checkBounds(cell)) {
+            throw "Out-of-bounds cell passed to addCell: "+cell;
+        }
+
+        var index = cell[3];
+
+        // Add to structure
+        this.cells[index] = cell
+
+        // Remove from frontier
+        delete this.frontier[index];
+
+        // Update current frontier values
+        for(c in this.frontier) {
+            var f = this.frontier[c];
+            f[0] += 1.0 - (0.5 / distance(cell, f.cell));
+        }
+
+        // Add adjacent cells to frontier
+        for(var dx=-1; dx<=1; dx++) {
+            for(var dy=-1; dy<=1; dy++) {
+                for(var dz=-1; dz<=1; dz++) {
+                    if(dx != 0 && dy !=0 && dz != 0) {
+                        var newCell = this.field.makeCell(cell.x+dx, cell.y+dy, cell.z+dz);
+                        this.addFrontier(newCell);
+                    }
+                }
+            }
+        }
+    };
+
+    // Add a cell to the frontier
+    this.addFrontier = function(cell) {
+        if(!this.field.checkBounds(cell)) {
+            throw "Out-of-bounds cell passed to addFrontier: "+cell;
+        }
+
+        var index = cell[3];
+
+        if(this.cells[index] || this.frontier[index]) {
+            // Adding cells in structure or cells already in the
+            // frontier is a no-op
+            return;
+        }
+
+        var v = 0;
+        for(h in this.cells) {
+            v += 1.0 - (0.5 / distance(cell, this.cells[h].cell));
+        }
+
+        this.frontierMin = Math.min(v, this.frontierMin);
+        this.frontierMax = Math.max(v, this.frontierMax);
+        this.frontierCount += 1;
+
+        this.frontier[index] = [v, cell]
+    };
+
+    // Sample a cell from the frontier
+    this.sample = function(power) {
+        var min = this.frontierMin;
+        var max = this.frontierMax;
+        var range = max - min;
+
+        if(valueRange <= 0.001) {
+            // For very narrow value ranges, sample uniformly
+            var s = Math.random() * total;
+            for(h in this.frontier) {
+                s -= 1.0;
+                if(s <= 0) {
+                    return this.frontier[h][1];
+                }
+            }
+        } else {
+            var sum = 0.0;
+            for(h in this.frontier) {
+                sum += Math.pow((this.frontier[h][0] - min) / range, power);
+            }
+            var s = Math.random() * sum;
+            for(h in this.frontier) {
+                s -= Math.pow((this.frontier[h][0] - min)/range, power);
+                if(s <= 0) {
+                    return this.frontier[h][1];
+                }
+            }
+        }
+
+        throw "sample failed";
+    }
+}
+
 exports.Field = Field
 
 // -----------------------------------------------------------------------------

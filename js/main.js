@@ -51,14 +51,14 @@ var init = function() {
         reset: function() {
             setup();
         },
-        power: 500.0,
+        power: 200.0,
     };
 
     var gui = new dat.GUI();
     gui.add(settings, 'loop');
     gui.add(settings, 'reset');
-    gui.add(settings, 'power', 0, 1000);
-    gui.closed = true;
+    gui.add(settings, 'power', 50, 400);
+    gui.closed = false;
 
     setup();
 }
@@ -95,8 +95,11 @@ var render = function () {
     requestAnimationFrame(render);
 
     if(!field.finished) {
-        var sample = field.sampleSourceFrontier(settings.power);
-        field.addSource(sample.cell, sample.parent);
+
+        for(var i=0; i<10; i++) {
+            var sample = field.sampleSourceFrontier(settings.power);
+            field.addSource(sample.cell, sample.parent);
+        }
 
         var channels = field.getChannels();
 
