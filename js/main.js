@@ -1,5 +1,6 @@
 var width, height;
 var scene, camera, renderer;
+var controls;
 
 var stats;
 var settings;
@@ -18,24 +19,23 @@ var init = function() {
 //    camera = (width > height) ? new THREE.OrthographicCamera(-0.6*(width/height), 0.6*(width/height), 0.6, -0.6, 1, 10) :
 //        new THREE.OrthographicCamera(-0.6, 0.6, 0.6*(height/width), -0.6*(height/width), 1, 10);
 
-    camera = new THREE.PerspectiveCamera(45, width / height, 1, 1000)
+    camera = new THREE.PerspectiveCamera(45, width / height, 1, 1000);
+    camera.position.z = 100.0;
 
-    camera.position.z = 1.5;
+    controls = new THREE.TrackballControls( camera );
+    controls.rotateSpeed = 1.0;
+    controls.zoomSpeed = 0.2;
+    controls.panSpeed = 0.8;
+
+    controls.noZoom = false;
+    controls.noPan = false;
+
+    controls.staticMoving = true;
+    controls.dynamicDampingFactor = 0.3;
+
 
     renderer = new THREE.WebGLRenderer();
     renderer.setSize(width, height);
-
-    lineGeometry = new THREE.Geometry();
-    var material = new THREE.LineBasicMaterial({
-        color: 0xa0c0ff,
-        linewidth: 1,
-        vertexColors: true});
-    for(var i=0; i<lineSize; i++) {
-        lineGeometry.vertices.push(new THREE.Vector3(0, 0, 0));
-        lineGeometry.colors.push(new THREE.Color(0xffffff))
-    }
-    var line = new THREE.Line(lineGeometry, material, THREE.LinePieces);
-    scene.add(line);
 
     var container = document.createElement('div');
     document.body.appendChild(container);
@@ -47,17 +47,11 @@ var init = function() {
     container.appendChild(stats.domElement);
 
     settings = {
-        loop: false,
-        reset: function() {
-            setup();
-        },
-        power: 200.0,
+        viewField: true
     };
 
     var gui = new dat.GUI();
-    gui.add(settings, 'loop');
-    gui.add(settings, 'reset');
-    gui.add(settings, 'power', 50, 400);
+    gui.add(settings, 'viewField');
     gui.closed = false;
 
     setup();
@@ -66,67 +60,666 @@ var init = function() {
 var setup = function() {
     frame = 0;
 
-    field = new Field(256, 256);
-    field.addSource({x: field.width/2, y: field.height-1});
+    field = new Field([32, 32, 32]);
+    field.source.dummy();
 
-    for(var i=0; i<field.width; i++) {
-        field.addSink({x: i, y: 0});
-    }
-
-    for(var i=0; i<lineSize; i++) {
-        lineGeometry.vertices[i].set(0, 0, 0);
-        lineGeometry.colors[i].setRGB(1, 1, 1);
-    }
-
-    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({color: 0x000008})));
-
-    var filterWidth = width;
-    var filterHeight = height;
-    filter = new Filter(filterWidth, filterHeight);
-    filter.addPass(new HorizontalBlur(1.0/filterWidth));
-    filter.addPass(new VerticalBlur(1.0/filterHeight));
 }
 
-var convert = function(pt) {
-    return {x: (pt.x / field.width) - 0.5, y: (pt.y / field.height) - 0.5};
+/**
+ * @author Eberhard Graether / http://egraether.com/
+ * @author Mark Lundin / http://mark-lundin.com
+ */
+
+THREE.TrackballControls = function ( object, domElement ) {
+
+    var _this = this;
+    var STATE = { NONE: -1, ROTATE: 0, ZOOM: 1, PAN: 2, TOUCH_ROTATE: 3, TOUCH_ZOOM: 4, TOUCH_PAN: 5 };
+
+    this.object = object;
+    this.domElement = ( domElement !== undefined ) ? domElement : document;
+
+    // API
+
+    this.enabled = true;
+
+    this.screen = { left: 0, top: 0, width: 0, height: 0 };
+
+    this.rotateSpeed = 1.0;
+    this.zoomSpeed = 1.2;
+    this.panSpeed = 0.3;
+
+    this.noRotate = false;
+    this.noZoom = false;
+    this.noPan = false;
+    this.noRoll = false;
+
+    this.staticMoving = false;
+    this.dynamicDampingFactor = 0.2;
+
+    this.minDistance = 0;
+    this.maxDistance = Infinity;
+
+    this.keys = [ 65 /*A*/, 83 /*S*/, 68 /*D*/ ];
+
+    // internals
+
+    this.target = new THREE.Vector3();
+
+    var EPS = 0.000001;
+
+    var lastPosition = new THREE.Vector3();
+
+    var _state = STATE.NONE,
+    _prevState = STATE.NONE,
+
+    _eye = new THREE.Vector3(),
+
+    _rotateStart = new THREE.Vector3(),
+    _rotateEnd = new THREE.Vector3(),
+
+    _zoomStart = new THREE.Vector2(),
+    _zoomEnd = new THREE.Vector2(),
+
+    _touchZoomDistanceStart = 0,
+    _touchZoomDistanceEnd = 0,
+
+    _panStart = new THREE.Vector2(),
+    _panEnd = new THREE.Vector2();
+
+    // for reset
+
+    this.target0 = this.target.clone();
+    this.position0 = this.object.position.clone();
+    this.up0 = this.object.up.clone();
+
+    // events
+
+    var changeEvent = { type: 'change' };
+    var startEvent = { type: 'start'};
+    var endEvent = { type: 'end'};
+
+
+    // methods
+
+    this.handleResize = function () {
+
+        if ( this.domElement === document ) {
+
+            this.screen.left = 0;
+            this.screen.top = 0;
+            this.screen.width = window.innerWidth;
+            this.screen.height = window.innerHeight;
+
+            } else {
+
+                var box = this.domElement.getBoundingClientRect();
+                // adjustments come from similar code in the jquery
+                // offset() function
+                var d = this.domElement.ownerDocument.documentElement;
+                this.screen.left = box.left + window.pageXOffset - d.clientLeft;
+                this.screen.top = box.top + window.pageYOffset - d.clientTop;
+                this.screen.width = box.width;
+                this.screen.height = box.height;
+
+                }
+
+        };
+
+    this.handleEvent = function ( event ) {
+
+        if ( typeof this[ event.type ] == 'function' ) {
+
+            this[ event.type ]( event );
+
+            }
+
+        };
+
+    this.getMouseOnScreen = function ( pageX, pageY, vector ) {
+
+        return vector.set(
+            ( pageX - _this.screen.left ) / _this.screen.width,
+            ( pageY - _this.screen.top ) / _this.screen.height
+            );
+
+        };
+
+    this.getMouseProjectionOnBall = (function(){
+
+        var objectUp = new THREE.Vector3(),
+            mouseOnBall = new THREE.Vector3();
+
+
+        return function ( pageX, pageY, projection ) {
+
+            mouseOnBall.set(
+                ( pageX - _this.screen.width * 0.5 - _this.screen.left ) / (_this.screen.width*.5),
+                ( _this.screen.height * 0.5 + _this.screen.top - pageY ) / (_this.screen.height*.5),
+                0.0
+                );
+
+            var length = mouseOnBall.length();
+
+            if ( _this.noRoll ) {
+
+                if ( length < Math.SQRT1_2 ) {
+
+                    mouseOnBall.z = Math.sqrt( 1.0 - length*length );
+
+                    } else {
+
+                        mouseOnBall.z = .5 / length;
+                        
+                        }
+
+                } else if ( length > 1.0 ) {
+
+                    mouseOnBall.normalize();
+
+                    } else {
+
+                        mouseOnBall.z = Math.sqrt( 1.0 - length * length );
+
+                        }
+
+            _eye.copy( _this.object.position ).sub( _this.target );
+
+            projection.copy( _this.object.up ).setLength( mouseOnBall.y )
+            projection.add( objectUp.copy( _this.object.up ).cross( _eye ).setLength( mouseOnBall.x ) );
+            projection.add( _eye.setLength( mouseOnBall.z ) );
+
+            return projection;
+            }
+
+        }());
+
+    this.rotateCamera = (function(){
+
+        var axis = new THREE.Vector3(),
+        quaternion = new THREE.Quaternion();
+
+
+        return function () {
+
+            var angle = Math.acos( _rotateStart.dot( _rotateEnd ) / _rotateStart.length() / _rotateEnd.length() );
+
+            if ( angle ) {
+
+                axis.crossVectors( _rotateStart, _rotateEnd ).normalize();
+
+                angle *= _this.rotateSpeed;
+
+                quaternion.setFromAxisAngle( axis, -angle );
+
+                _eye.applyQuaternion( quaternion );
+                _this.object.up.applyQuaternion( quaternion );
+
+                _rotateEnd.applyQuaternion( quaternion );
+
+                if ( _this.staticMoving ) {
+
+                    _rotateStart.copy( _rotateEnd );
+
+                    } else {
+
+                        quaternion.setFromAxisAngle( axis, angle * ( _this.dynamicDampingFactor - 1.0 ) );
+                        _rotateStart.applyQuaternion( quaternion );
+
+                        }
+
+                }
+            }
+
+        }());
+
+    this.zoomCamera = function () {
+
+        if ( _state === STATE.TOUCH_ZOOM ) {
+
+            var factor = _touchZoomDistanceStart / _touchZoomDistanceEnd;
+            _touchZoomDistanceStart = _touchZoomDistanceEnd;
+            _eye.multiplyScalar( factor );
+
+            } else {
+
+                var factor = 1.0 + ( _zoomEnd.y - _zoomStart.y ) * _this.zoomSpeed;
+
+                if ( factor !== 1.0 && factor > 0.0 ) {
+
+                    _eye.multiplyScalar( factor );
+
+                    if ( _this.staticMoving ) {
+
+                        _zoomStart.copy( _zoomEnd );
+
+                        } else {
+
+                            _zoomStart.y += ( _zoomEnd.y - _zoomStart.y ) * this.dynamicDampingFactor;
+
+                            }
+
+                    }
+
+                }
+
+        };
+
+    this.panCamera = (function(){
+
+        var mouseChange = new THREE.Vector2(),
+        objectUp = new THREE.Vector3(),
+        pan = new THREE.Vector3();
+
+        return function () {
+
+            mouseChange.copy( _panEnd ).sub( _panStart );
+
+            if ( mouseChange.lengthSq() ) {
+
+                mouseChange.multiplyScalar( _eye.length() * _this.panSpeed );
+
+                pan.copy( _eye ).cross( _this.object.up ).setLength( mouseChange.x );
+                pan.add( objectUp.copy( _this.object.up ).setLength( mouseChange.y ) );
+
+                _this.object.position.add( pan );
+                _this.target.add( pan );
+
+                if ( _this.staticMoving ) {
+
+                    _panStart.copy( _panEnd );
+
+                    } else {
+
+                        _panStart.add( mouseChange.subVectors( _panEnd, _panStart ).multiplyScalar( _this.dynamicDampingFactor ) );
+
+                        }
+
+                }
+            }
+
+        }());
+
+    this.checkDistances = function () {
+
+        if ( !_this.noZoom || !_this.noPan ) {
+
+            if ( _eye.lengthSq() > _this.maxDistance * _this.maxDistance ) {
+
+                _this.object.position.addVectors( _this.target, _eye.setLength( _this.maxDistance ) );
+
+                }
+
+            if ( _eye.lengthSq() < _this.minDistance * _this.minDistance ) {
+
+                _this.object.position.addVectors( _this.target, _eye.setLength( _this.minDistance ) );
+
+                }
+
+            }
+
+        };
+
+    this.update = function () {
+
+        _eye.subVectors( _this.object.position, _this.target );
+
+        if ( !_this.noRotate ) {
+
+            _this.rotateCamera();
+
+            }
+
+        if ( !_this.noZoom ) {
+
+            _this.zoomCamera();
+
+            }
+
+        if ( !_this.noPan ) {
+
+            _this.panCamera();
+
+            }
+
+        _this.object.position.addVectors( _this.target, _eye );
+
+        _this.checkDistances();
+
+        _this.object.lookAt( _this.target );
+
+        if ( lastPosition.distanceToSquared( _this.object.position ) > EPS ) {
+
+            _this.dispatchEvent( changeEvent );
+
+            lastPosition.copy( _this.object.position );
+
+            }
+
+        };
+
+    this.reset = function () {
+
+        _state = STATE.NONE;
+        _prevState = STATE.NONE;
+
+        _this.target.copy( _this.target0 );
+        _this.object.position.copy( _this.position0 );
+        _this.object.up.copy( _this.up0 );
+
+        _eye.subVectors( _this.object.position, _this.target );
+
+        _this.object.lookAt( _this.target );
+
+        _this.dispatchEvent( changeEvent );
+
+        lastPosition.copy( _this.object.position );
+
+        };
+
+    // listeners
+
+    function keydown( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        window.removeEventListener( 'keydown', keydown );
+
+        _prevState = _state;
+
+        if ( _state !== STATE.NONE ) {
+
+            return;
+
+            } else if ( event.keyCode === _this.keys[ STATE.ROTATE ] && !_this.noRotate ) {
+
+                _state = STATE.ROTATE;
+
+                } else if ( event.keyCode === _this.keys[ STATE.ZOOM ] && !_this.noZoom ) {
+
+                    _state = STATE.ZOOM;
+
+                    } else if ( event.keyCode === _this.keys[ STATE.PAN ] && !_this.noPan ) {
+
+                        _state = STATE.PAN;
+
+                        }
+
+        }
+
+    function keyup( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        _state = _prevState;
+
+        window.addEventListener( 'keydown', keydown, false );
+
+        }
+
+    function mousedown( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if ( _state === STATE.NONE ) {
+
+            _state = event.button;
+
+            }
+
+        if ( _state === STATE.ROTATE && !_this.noRotate ) {
+
+            _this.getMouseProjectionOnBall( event.pageX, event.pageY, _rotateStart );
+            _rotateEnd.copy(_rotateStart)
+
+            } else if ( _state === STATE.ZOOM && !_this.noZoom ) {
+
+                _this.getMouseOnScreen( event.pageX, event.pageY, _zoomStart );
+                _zoomEnd.copy(_zoomStart);
+
+                } else if ( _state === STATE.PAN && !_this.noPan ) {
+
+                    _this.getMouseOnScreen( event.pageX, event.pageY, _panStart );
+                    _panEnd.copy(_panStart)
+
+                    }
+
+        document.addEventListener( 'mousemove', mousemove, false );
+        document.addEventListener( 'mouseup', mouseup, false );
+        _this.dispatchEvent( startEvent );
+
+
+        }
+
+    function mousemove( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        if ( _state === STATE.ROTATE && !_this.noRotate ) {
+
+            _this.getMouseProjectionOnBall( event.pageX, event.pageY, _rotateEnd );
+
+            } else if ( _state === STATE.ZOOM && !_this.noZoom ) {
+
+                _this.getMouseOnScreen( event.pageX, event.pageY, _zoomEnd );
+
+                } else if ( _state === STATE.PAN && !_this.noPan ) {
+
+                    _this.getMouseOnScreen( event.pageX, event.pageY, _panEnd );
+
+                    }
+
+        }
+
+    function mouseup( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        _state = STATE.NONE;
+
+        document.removeEventListener( 'mousemove', mousemove );
+        document.removeEventListener( 'mouseup', mouseup );
+        _this.dispatchEvent( endEvent );
+
+        }
+
+    function mousewheel( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        var delta = 0;
+
+        if ( event.wheelDelta ) { // WebKit / Opera / Explorer 9
+
+            delta = event.wheelDelta / 40;
+
+            } else if ( event.detail ) { // Firefox
+
+                delta = - event.detail / 3;
+
+                }
+
+        _zoomStart.y += delta * 0.01;
+        _this.dispatchEvent( startEvent );
+        _this.dispatchEvent( endEvent );
+
+        }
+
+    function touchstart( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        switch ( event.touches.length ) {
+
+            case 1:
+            _state = STATE.TOUCH_ROTATE;
+            _rotateEnd.copy( _this.getMouseProjectionOnBall( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _rotateStart ));
+            break;
+
+            case 2:
+            _state = STATE.TOUCH_ZOOM;
+            var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+            var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+            _touchZoomDistanceEnd = _touchZoomDistanceStart = Math.sqrt( dx * dx + dy * dy );
+            break;
+
+            case 3:
+            _state = STATE.TOUCH_PAN;
+            _panEnd.copy( _this.getMouseOnScreen( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _panStart ));
+            break;
+
+            default:
+            _state = STATE.NONE;
+
+            }
+        _this.dispatchEvent( startEvent );
+
+
+        }
+
+    function touchmove( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        switch ( event.touches.length ) {
+
+            case 1:
+            _this.getMouseProjectionOnBall( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _rotateEnd );
+            break;
+
+            case 2:
+            var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
+            var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
+            _touchZoomDistanceEnd = Math.sqrt( dx * dx + dy * dy )
+            break;
+
+            case 3:
+            _this.getMouseOnScreen( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _panEnd );
+            break;
+
+            default:
+            _state = STATE.NONE;
+
+            }
+
+        }
+
+    function touchend( event ) {
+
+        if ( _this.enabled === false ) return;
+
+        switch ( event.touches.length ) {
+
+            case 1:
+            _rotateStart.copy( _this.getMouseProjectionOnBall( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _rotateEnd ));
+            break;
+
+            case 2:
+            _touchZoomDistanceStart = _touchZoomDistanceEnd = 0;
+            break;
+
+            case 3:
+            _panStart.copy( _this.getMouseOnScreen( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY, _panEnd ));
+            break;
+
+            }
+
+        _state = STATE.NONE;
+        _this.dispatchEvent( endEvent );
+
+        }
+
+    this.domElement.addEventListener( 'contextmenu', function ( event ) { event.preventDefault(); }, false );
+
+    this.domElement.addEventListener( 'mousedown', mousedown, false );
+
+    this.domElement.addEventListener( 'mousewheel', mousewheel, false );
+    this.domElement.addEventListener( 'DOMMouseScroll', mousewheel, false ); // firefox
+
+    this.domElement.addEventListener( 'touchstart', touchstart, false );
+    this.domElement.addEventListener( 'touchend', touchend, false );
+    this.domElement.addEventListener( 'touchmove', touchmove, false );
+
+    window.addEventListener( 'keydown', keydown, false );
+    window.addEventListener( 'keyup', keyup, false );
+
+    this.handleResize();
+
+    // force an update at start
+    this.update();
+
 };
+
+THREE.TrackballControls.prototype = Object.create( THREE.EventDispatcher.prototype );
+
+function buildAxis( src, dst, colorHex, dashed ) {
+        var geom = new THREE.Geometry(),
+            mat; 
+
+        if(dashed) {
+                mat = new THREE.LineDashedMaterial({ linewidth: 1, color: colorHex, dashSize: 1, gapSize: 1 });
+        } else {
+                mat = new THREE.LineBasicMaterial({ linewidth: 1, color: colorHex });
+        }
+
+        geom.vertices.push( src.clone() );
+        geom.vertices.push( dst.clone() );
+        geom.computeLineDistances(); // This one is SUPER important,
+    // otherwise dashed lines will appear as simple plain lines
+
+        var axis = new THREE.Line( geom, mat, THREE.LinePieces );
+
+        return axis;
+
+}
+
+function buildAxes( length ) {
+        var axes = new THREE.Object3D();
+
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( length, 0, 0 ), 0xFF0000, false ) ); // +X
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( -length, 0, 0 ), 0xFF0000, true) ); // -X
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, length, 0 ), 0x00FF00, false ) ); // +Y
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, -length, 0 ), 0x00FF00, true ) ); // -Y
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, length ), 0x0000FF, false ) ); // +Z
+        axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, -length ), 0x0000FF, true ) ); // -Z
+
+        return axes;
+
+}
 
 var render = function () {
     requestAnimationFrame(render);
 
-    if(!field.finished) {
+    controls.update();
 
-        for(var i=0; i<10; i++) {
-            var sample = field.sampleSourceFrontier(settings.power);
-            field.addSource(sample.cell, sample.parent);
-        }
+    var axes = buildAxes(1000);
+    scene.add(axes);
+    if(settings.viewField) {
+        var volume = new THREE.Box3(new THREE.Vector3(-1,-1,-1), new THREE.Vector3(1,1,1));
+        field.render(scene, volume);
+    } else {
 
-        var channels = field.getChannels();
-
-        var vertex = 0;
-        for(var i=0; i<channels.length; i++) {
-            var channel = channels[i];
-            for(var j=1; j<channel.length && vertex < lineSize; j++) {
-                var pt1 = convert(channel[j-1]);
-                var pt2 = convert(channel[j]);
-                lineGeometry.vertices[vertex].set(pt1.x, pt1.y, 0);
-                lineGeometry.vertices[vertex+1].set(pt2.x, pt2.y, 0);
-
-                vertex += 2;
-            }
-        }
-
-        lineGeometry.verticesNeedUpdate = true;
-        //        lineGeometry.colorsNeedUpdate = true;
-    } else if (settings.loop) {
-        frame = 0;
-        setup();
     }
 
     frame += 1;
 
-    filter.render(renderer, scene, camera);
-
+    if(frame < 1000) {
+        renderer.render(scene, camera);
+    }
     stats.update();
 };
 

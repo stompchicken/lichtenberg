@@ -24,8 +24,12 @@ function Field(dim) {
                cell[2] >= 0 && cell[2] < this.dim[2];
     }
 
-    this.makeCell(x, y, z) {
-        return [x, y, z, (z*this.dim[0]*this.dim[1]) + (y*this.dim[0]) + x]
+    this.makeCell = function(x, y, z) {
+        return [x, y, z, (z*this.dim[0]*this.dim[1]) + (y*this.dim[0]) + x];
+    }
+
+    this.render = function(scene, volume) {
+        this.source.render(scene, volume);
     }
 
 /*
@@ -83,6 +87,13 @@ function Structure(field) {
     this.frontierMax = -Number.MAX_VALUE;
     this.frontierMin = Number.MAX_VALUE;
     this.frontierSize = 0;
+
+    this.dummy = function() {
+        for(var i=0; i<this.field.dim[0]; i++) {
+            var cell = this.field.makeCell(i,i,i);
+            this.cells[cell[3]] = cell;
+        }
+    };
 
     // Add a cell to the structure
     this.addCell = function(cell) {
@@ -174,13 +185,38 @@ function Structure(field) {
 
         throw "sample failed";
     }
+
+    this.render = function(scene, volume) {
+        var size = volume.size();
+        var cube = new THREE.Mesh(new THREE.CubeGeometry(size.x, size.y, size.z),
+                                  new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true}));
+        cube.position = volume.center();
+//        cube.position.z = -1.0;
+        scene.add(cube);
+
+        var size = new THREE.Vector3(size.x / this.field.dim[0],
+                                     size.y / this.field.dim[1],
+                                     size.z / this.field.dim[2]);
+        var cube = new THREE.Mesh(new THREE.CubeGeometry(size.x, size.y, size.z),
+                                  new THREE.MeshBasicMaterial({color: 0xff0000}));
+
+        for(k in this.cells) {
+            var cell = this.cells[k]
+            cube.position.x = volume.min.x + cell[0]*size.x;
+            cube.position.y = volume.min.y + cell[1]*size.y;
+            cube.position.z = volume.min.z + cell[2]*size.z;
+            scene.add(cube.clone());
+        }
+
+
+    }
 }
 
 exports.Field = Field
 
 // -----------------------------------------------------------------------------
 // Filter
-
+/*
 function Filter(width, height) {
     this.width = width;
     this.height = height;
@@ -360,3 +396,4 @@ function APSF() {
     
 
 };
+*/
