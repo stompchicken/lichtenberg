@@ -2,213 +2,220 @@ if(typeof exports == 'undefined'){
     var exports = this['lichtenberg'] = {};
 }
 
-function distance(c1, c2) {
-    var dx = (c1[0] - c2[0]);
-    var dy = (c1[1] - c2[1]);
-    var dz = (c1[2] - c2[2]);
-    return Math.sqrt(dx*dx + dy*dy + dz*dz);
-}
+
 
 // -----------------------------------------------------------------------------
 // Field
 
+function Cell(x, y, z, index, value) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.index = index;
+    this.value = value;
+}
+
+function distance(c1, c2) {
+    var dx = (c1.x - c2.x);
+    var dy = (c1.y - c2.y);
+    var dz = (c1.z - c2.z);
+    return Math.sqrt(dx*dx + dy*dy + dz*dz);
+}
+
 // dim = [xspan, yspan, zspan]
 function Field(dim) {
     this.dim = dim;
-    this.source = new Structure(this);
     this.finished = false;
 
-    this.checkBounds = function(cell) {
-        return cell[0] >= 0 && cell[0] < this.dim[0] &&
-               cell[1] >= 0 && cell[1] < this.dim[1] &&
-               cell[2] >= 0 && cell[2] < this.dim[2];
-    }
-
-    this.makeCell = function(x, y, z) {
-        return [x, y, z, (z*this.dim[0]*this.dim[1]) + (y*this.dim[0]) + x];
-    }
-
-    this.render = function(scene, volume) {
-        this.source.render(scene, volume);
-    }
-
-/*
-    this.getChannels = function() {
-        // Gather terminal nodes
-        var terminals = [];
-        for(h in this.source) {
-            if(this.source[h].terminal) {
-                terminals.push(h);
-            }
-        }
-
-        // Sort by depth
-        terminals.sort(function(a,b){ return b.depth-a.depth; });
-
-        var visited = {}
-
-        // Create channels from root to leaf, deepest first
-        var channels = [];
-        for(var i=0; i<terminals.length; i++) {
-            var channel = [];
-            var node = this.source[terminals[i]];
-            while(node != null) {
-                var hash = this.hashCell(node.cell);
-                channel.push({x: node.cell.x + node.jitter[0],
-                              y: node.cell.y + node.jitter[1]});
-
-                if(visited[hash]) {
-                    break;
-                } else {
-                    visited[hash] = true
-                }
-
-                node = this.source[node.parent];
-            }
-            channel.reverse();
-
-            channels.push(channel);
-        }
-
-        return channels;
-    }
-*/
-}
-
-function Structure(field) {
-
-    this.field = field;
     // index -> cell
     this.cells = {};
-    // index -> [value, cell]
     this.frontier = {};
 
     // Some cached frontier values
     this.frontierMax = -Number.MAX_VALUE;
     this.frontierMin = Number.MAX_VALUE;
     this.frontierSize = 0;
+}
 
-    this.dummy = function() {
-        for(var i=0; i<this.field.dim[0]; i++) {
-            var cell = this.field.makeCell(i,i,i);
-            this.cells[cell[3]] = cell;
-        }
-    };
+Field.prototype.checkBounds = function(cell) {
+    return cell.x >= 0 && cell.x < this.dim[0] &&
+        cell.y >= 0 && cell.y < this.dim[1] &&
+        cell.z >= 0 && cell.z < this.dim[2];
+}
 
-    // Add a cell to the structure
-    this.addCell = function(cell) {
-        if(!this.field.checkBounds(cell)) {
-            throw "Out-of-bounds cell passed to addCell: "+cell;
-        }
+Field.prototype.makeCell = function(x, y, z, value) {
+    return new Cell(x, y, z, (z*this.dim[0]*this.dim[1]) + (y*this.dim[0]) + x, value);
+}
 
-        var index = cell[3];
-
-        // Add to structure
-        this.cells[index] = cell
-
-        // Remove from frontier
-        delete this.frontier[index];
-
-        // Update current frontier values
-        for(c in this.frontier) {
-            var f = this.frontier[c];
-            f[0] += 1.0 - (0.5 / distance(cell, f.cell));
-        }
-
-        // Add adjacent cells to frontier
-        for(var dx=-1; dx<=1; dx++) {
-            for(var dy=-1; dy<=1; dy++) {
-                for(var dz=-1; dz<=1; dz++) {
-                    if(dx != 0 && dy !=0 && dz != 0) {
-                        var newCell = this.field.makeCell(cell.x+dx, cell.y+dy, cell.z+dz);
-                        this.addFrontier(newCell);
-                    }
-                }
-            }
-        }
-    };
-
-    // Add a cell to the frontier
-    this.addFrontier = function(cell) {
-        if(!this.field.checkBounds(cell)) {
-            throw "Out-of-bounds cell passed to addFrontier: "+cell;
-        }
-
-        var index = cell[3];
-
-        if(this.cells[index] || this.frontier[index]) {
-            // Adding cells in structure or cells already in the
-            // frontier is a no-op
-            return;
-        }
-
-        var v = 0;
-        for(h in this.cells) {
-            v += 1.0 - (0.5 / distance(cell, this.cells[h].cell));
-        }
-
-        this.frontierMin = Math.min(v, this.frontierMin);
-        this.frontierMax = Math.max(v, this.frontierMax);
-        this.frontierCount += 1;
-
-        this.frontier[index] = [v, cell]
-    };
-
-    // Sample a cell from the frontier
-    this.sample = function(power) {
-        var min = this.frontierMin;
-        var max = this.frontierMax;
-        var range = max - min;
-
-        if(valueRange <= 0.001) {
-            // For very narrow value ranges, sample uniformly
-            var s = Math.random() * total;
-            for(h in this.frontier) {
-                s -= 1.0;
-                if(s <= 0) {
-                    return this.frontier[h][1];
-                }
-            }
-        } else {
-            var sum = 0.0;
-            for(h in this.frontier) {
-                sum += Math.pow((this.frontier[h][0] - min) / range, power);
-            }
-            var s = Math.random() * sum;
-            for(h in this.frontier) {
-                s -= Math.pow((this.frontier[h][0] - min)/range, power);
-                if(s <= 0) {
-                    return this.frontier[h][1];
-                }
-            }
-        }
-
-        throw "sample failed";
+Field.prototype.addCell = function(cell) {
+    if(!this.checkBounds(cell)) {
+        throw "Out-of-bounds cell passed to addCell: "+cell;
     }
 
-    this.render = function(scene, volume) {
-        var size = volume.size();
-        var cube = new THREE.Mesh(new THREE.CubeGeometry(size.x, size.y, size.z),
-                                  new THREE.MeshBasicMaterial({color: 0xffff00, wireframe: true}));
-        cube.position = volume.center();
-//        cube.position.z = -1.0;
-        scene.add(cube);
+    var index = cell.index;
 
-        var size = new THREE.Vector3(size.x / this.field.dim[0],
-                                     size.y / this.field.dim[1],
-                                     size.z / this.field.dim[2]);
-        var cube = new THREE.Mesh(new THREE.CubeGeometry(size.x, size.y, size.z),
-                                  new THREE.MeshBasicMaterial({color: 0xff0000}));
+    // Add to structure
+    this.cells[index] = cell
 
-        for(k in this.cells) {
-            var cell = this.cells[k]
-            cube.position.x = volume.min.x + cell[0]*size.x;
-            cube.position.y = volume.min.y + cell[1]*size.y;
-            cube.position.z = volume.min.z + cell[2]*size.z;
-            scene.add(cube.clone());
+    // Remove from frontier
+    delete this.frontier[index];
+
+    // Update current frontier values with new cell on the structure
+    for(c in this.frontier) {
+        var f = this.frontier[c];
+        f.value += 1.0 - cell.value * (0.5 / distance(cell, f.value));
+    }
+
+    // Add adjacent cells to frontier
+    for(var dx=-1; dx<=1; dx++) {
+        for(var dy=-1; dy<=1; dy++) {
+            for(var dz=-1; dz<=1; dz++) {
+                if(dx == 0 && dy == 0 && dz == 0) continue;
+                var newCell = this.makeCell(cell.x+dx, cell.y+dy, cell.z+dz, 0.0);
+                if(this.checkBounds(newCell)) {
+                    this.addFrontier(newCell);
+                }
+            }
         }
+    }
+};
+
+// Add a cell to the frontier
+Field.prototype.addFrontier = function(cell) {
+    if(!this.checkBounds(cell)) {
+        throw "Out-of-bounds cell passed to addFrontier: "+cell;
+    }
+
+    var index = cell.index;
+
+    if(this.cells[index] || this.frontier[index]) {
+        // Adding cells in structure or cells already in the
+        // frontier is a no-op
+        return;
+    }
+
+    // Value is inversely proportional to distance from all points
+    // on the structure
+    var v = 0;
+    for(h in this.cells) {
+        v += 1.0 - this.cells[h].value * (0.5 / distance(cell, this.cells[h]));
+    }
+    cell.value = v;
+    this.frontier[index] = cell;
+
+    // Update cached frontier values
+    this.frontierMin = Math.min(v, this.frontierMin);
+    this.frontierMax = Math.max(v, this.frontierMax);
+    this.frontierCount += 1;
+};
+
+// Sample a cell from the frontier
+Field.prototype.sample = function(power) {
+    var min = this.frontierMin;
+    var max = this.frontierMax;
+    var range = max - min;
+
+    if(range <= 0.001) {
+        // For very narrow value ranges, sample uniformly
+        var s = Math.random() * total;
+        for(h in this.frontier) {
+            s -= 1.0;
+            if(s <= 0) {
+                return this.frontier[h];
+            }
+        }
+    } else {
+        var sum = 0.0;
+        for(h in this.frontier) {
+            sum += Math.pow((this.frontier[h].value - min) / range, power);
+        }
+        var s = Math.random() * sum;
+        for(h in this.frontier) {
+            s -= Math.pow((this.frontier[h].value - min)/range, power);
+            if(s <= 0) {
+                return this.frontier[h];
+            }
+        }
+    }
+
+    throw "Field.sample() failed";
+}
+
+function FieldView(field, scene) {
+    this.field = field;
+
+    this.object = new THREE.Object3D();
+    scene.add(this.object);
+
+    this.showBoundingBox = true;
+    this.showCells = true;
+    this.showFrontier = true;
+}
+
+FieldView.prototype.update = function(scene) {
+
+    // Generate bounding box
+    scene.remove(this.boundingBoxObject);
+    this.boundingBoxObject = new THREE.Object3D();
+    if(this.showBoundingBox) {
+        this.boundingBox = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.0, 1.0),
+                                          new THREE.MeshBasicMaterial());
+        var boxOutline = new THREE.BoxHelper(this.boundingBox);
+        boxOutline.material.color.setRGB(0.5, 0.5, 0.5);
+        this.boundingBoxObject.add(boxOutline);
+    }
+    scene.add(this.boundingBoxObject);
 
 
+    var size = new THREE.Vector3(1.0 / this.field.dim[0],
+                                 1.0 / this.field.dim[1],
+                                 1.0 / this.field.dim[2]);
+
+    // Generate cells
+    scene.remove(this.cellObject);
+    this.cellObject = new THREE.Object3D();
+    if(this.showCells) {
+        for(k in this.field.cells) {
+            var cell = this.field.cells[k]
+            var cube = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z),
+                                      new THREE.MeshBasicMaterial());
+            cube.position.set(-0.5 + (size.x/2.0) + cell.x*size.x,
+                              -0.5 + (size.y/2.0) + cell.y*size.y,
+                              -0.5 + (size.z/2.0) + cell.z*size.z);
+            cube.material.color.setHSL(-0.25*(cell.value-1.0), 0.5, 0.5);
+            var outline = new THREE.BoxHelper(cube);
+            outline.material.color.setRGB(1.0, 1.0, 1.0);
+            outline.material.linewidth = 2;
+            this.cellObject.add(outline);
+            // Adding cube after boxhelper works around weird bug in
+            // three.js - reports that it is fixed are all lies
+            // https://github.com/mrdoob/three.js/issues/4506
+            this.cellObject.add(cube);
+        }
+    }
+    scene.add(this.cellObject);
+
+    // Generate frontier
+    scene.remove(this.frontierObject);
+    this.frontierObject = new THREE.Object3D();
+    if(this.showFrontier) {
+        for(k in this.field.frontier) {
+            var cell = this.field.frontier[k]
+            var cube = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z),
+                                      new THREE.MeshBasicMaterial({transparent: true, opacity: 0.5}));
+            cube.position.set(-0.5 + (size.x/2.0) + cell.x*size.x,
+                              -0.5 + (size.y/2.0) + cell.y*size.y,
+                              -0.5 + (size.z/2.0) + cell.z*size.z);
+            cube.material.color.setHSL(-0.25*(cell.value-1.0), 0.5, 0.5);
+            var outline = new THREE.BoxHelper(cube);
+            outline.material.color.setRGB(0.5, 0.5, 0.5);
+            this.frontierObject.add(outline);
+            // Adding cube after boxhelper works around weird bug in
+            // three.js - reports that it is fixed are all lies
+            // https://github.com/mrdoob/three.js/issues/4506
+            this.frontierObject.add(cube);
+        }
+        scene.add(this.frontierObject);
     }
 }
 
