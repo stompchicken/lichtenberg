@@ -51,13 +51,13 @@ var init = function() {
         reset: function() {
             setup();
         },
-        power: 500.0,
+        power: 150.0,
     };
 
     var gui = new dat.GUI();
     gui.add(settings, 'loop');
     gui.add(settings, 'reset');
-    gui.add(settings, 'power', 0, 1000);
+    gui.add(settings, 'power', 0, 250);
     gui.closed = true;
 
     setup();
